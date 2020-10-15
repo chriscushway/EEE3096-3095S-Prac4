@@ -16,7 +16,6 @@ btn_increase = 18
 buzzer = None
 eeprom = ES2EEPROMUtils.ES2EEPROM()
 value = 0
-guess = 0
 pwmLED = None
 num_guesses = 0
 
@@ -48,8 +47,8 @@ def menu():
         print("Starting a new round!")
         print("Use the buttons on the Pi to make and submit your guess!")
         print("Press and hold the guess button to cancel your game")
-        end_of_game = False
         value = generate_number()
+        end_of_game = False
         while not end_of_game:
             pass
     elif option == "Q":
@@ -92,7 +91,7 @@ def setup():
     # Setup debouncing and callbacks
 
     GPIO.add_event_detect(18, GPIO.FALLING, callback=btn_increase_pressed, bouncetime=200)
-    GPIO.add_event_detect(btn_submit, GPIO.FALLING, callback=btn_guess_pressed, bouncetime=600)
+    GPIO.add_event_detect(btn_submit, GPIO.FALLING, callback=btn_guess_pressed, bouncetime=200)
     pass
 
 
@@ -119,9 +118,10 @@ def congratulate():
     print(' | |___| |__| | |\  | |__| | | \ \  / ____ \| |    ____) |')
     print('  \_____\____/|_| \_|\_____|_|  \_\/_/    \_\_|   |_____/ ')
     print(' ========================================================\n')
-    print(' ========================================================)
+    print(' ========================================================')
 # Save high scores
 def save_scores(name):
+    print('saving scores')
     # fetch scores
     s_count, ss = fetch_scores()
     # include new score
@@ -154,60 +154,66 @@ def generate_number():
 
 # Increase button pressed
 def btn_increase_pressed(channel):
-   
     # Increase the value shown on the LEDs
     # You can choose to have a global variable store the user's current guess, 
     # or just pull the value off the LEDs when a user makes a guess
-   
-    global guess
+
+    # Only enable button presses when game is still being played
+    if (not end_of_game):
+        # increment led value by 1
+        value = bin(get_led_value() + 1)
+        #handle overflow
+        if (int(value,2) >= 8):
+            value = '0b000'
+        # chop the '0b' off
+        value = value[2:]
+        padding = len(LED_value) - len(value)
+        for i in range(len(LED_value)):
+            channel = LED_value[i]
+            if (i < padding):
+                GPIO.output(channel, 0)
+            else:
+                GPIO.output(channel, int(value[i - padding ],2))   
+    pass
+
+def get_led_value():
     value = '0b'
     for pin in LED_value:
         value += str(GPIO.input(pin))
-    value = bin(int(value,2) + 1)
-    #handle edge case 
-    if (int(value,2) >= 8):
-        value = '0b000'
-    # chop the '0b' off
-    value = value[2:]
-    padding = len(LED_value) - len(value)
-    for i in range(len(LED_value)):
-        channel = LED_value[i]
-        if (i < padding):
-            GPIO.output(channel, 0)
-        else:
-            GPIO.output(channel, int(value[i - padding ],2))   
-    guess = int(value,2)
-    pass
+    return int(value,2)
 
 # Guess button
 def btn_guess_pressed(channel):
-    global end_of_game, value, guess, buzzer, pwmLED, num_guesses
-    name = ''
-    start = time.time()
-    while GPIO.input(channel) == GPIO.LOW:
-        time.sleep(0.01)
-        end = time.time()
-        if (end - start > 2):
-            end_of_game = True
-            return
-    if (value != guess):
+    global end_of_game, value, buzzer, pwmLED, num_guesses
+    # only allow guess submission when game is in session
+    if (not end_of_game):
+        print('guessing')
+        name = ''
         num_guesses += 1
-        buzzer.start(0)
-        pwmLED.start(0)
-        accuracy_leds()
-        trigger_buzzer()
-    else:
-        buzzer.stop()
-        pwmLED.stop()
-        os.system('clear')
-        congratulate()
-        name = input("You've completed the number shuffle challenge. You took " + str(num_guesses) + " guesses \nPlease enter your name below to save your score: \n")
-        while len(name) > 3:
-            name = input('Your name must not exceed 3 characters in length please re-enter your name: \n')
-        save_scores(name)
-        os.system('clear')
-        time.sleep(0.1)
-        end_of_game = True
+        guess = get_led_value()
+        start = time.time()
+        while GPIO.input(channel) == GPIO.LOW:
+            time.sleep(0.01)
+            end = time.time()
+            if (end - start > 2):
+                end_of_game = True
+                return
+        print('out of loop')
+        if (value != guess):
+            buzzer.start(0)
+            pwmLED.start(0)
+            accuracy_leds(guess)
+            trigger_buzzer(guess)
+        else:
+            buzzer.stop()
+            pwmLED.stop()
+            name = input("Congratulations! You've completed the number shuffle challenge. You took " + str(num_guesses) + " guesses \nPlease enter your name below to save your score: \n")
+            while not len(name) == 3:
+                name = input('Your name must be 3 characters in length please re-enter your name: \n')
+            save_scores(name)
+            os.system('clear')
+            time.sleep(0.1)
+            end_of_game = True
     
     # If they've pressed and held the button, clear up the GPIO and take them back to the menu screen
     # Compare the actual value with the user value displayed on the LEDs
@@ -224,7 +230,7 @@ def btn_guess_pressed(channel):
 
 
 # LED Brightness
-def accuracy_leds():
+def accuracy_leds(guess):
     # Set the brightness of the LED based on how close the guess is to the answer
     # - The % brightness should be directly proportional to the % "closeness"
     # - For example if the answer is 6 and a user guesses 4, the brightness should be at 4/6*100 = 66%
@@ -242,7 +248,7 @@ def accuracy_leds():
     pass
 
 # Sound Buzzer
-def trigger_buzzer():
+def trigger_buzzer(guess):
     # The buzzer operates differently from the LED
     # While we want the brightness of the LED to change(duty cycle), we want the frequency of the buzzer to change
     # The buzzer duty cycle should be left at 50%
@@ -259,7 +265,7 @@ def trigger_buzzer():
     elif (diff == 1):
         buzzer.ChangeFrequency(4)
     else:
-        buzzer.ChangeDutyCycle(0)
+        buzzer.ChangeDutyCycle(0) # case where is is not close enough 
     pass
 
 
