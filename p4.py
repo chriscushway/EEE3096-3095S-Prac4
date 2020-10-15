@@ -62,6 +62,7 @@ def display_scores(count, raw_data):
     # print the scores to the screen in the expected format
     print("There are {} scores. Here are the top 3!".format(count))
     # print out the scores in the required format
+    print(raw_data)
     for i in range(0,12,4): #loop until 12 because we only want 3 blocks 
         print(str(i//4 + 1) + ' - ' + raw_data[i] + raw_data[i + 1] + raw_data[i + 2] + ' took ' + str(raw_data[i + 3]) + ' guesses')
     pass
