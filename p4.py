@@ -15,12 +15,10 @@ btn_submit = 16
 btn_increase = 18
 buzzer = None
 eeprom = ES2EEPROMUtils.ES2EEPROM()
-guess = 0
-start = 0
-end = 0
 value = 0
 guess = 0
 pwmLED = None
+num_guesses = 0
 
 # Print the game banner
 def welcome():
@@ -50,8 +48,8 @@ def menu():
         print("Starting a new round!")
         print("Use the buttons on the Pi to make and submit your guess!")
         print("Press and hold the guess button to cancel your game")
+        end_of_game = False
         value = generate_number()
-        
         while not end_of_game:
             pass
     elif option == "Q":
@@ -89,14 +87,12 @@ def setup():
     GPIO.setup(LED_accuracy, GPIO.OUT)
     GPIO.setup(33, GPIO.OUT)
     pwmLED = GPIO.PWM(LED_accuracy, 100)
-    pwmLED.start(0)
     buzzer = GPIO.PWM(33, 1) #set initial frequency to 1 Hz
-    buzzer.start(0)
 
     # Setup debouncing and callbacks
 
     GPIO.add_event_detect(18, GPIO.FALLING, callback=btn_increase_pressed, bouncetime=200)
-    GPIO.add_event_detect(btn_submit, GPIO.FALLING, callback=btn_guess_pressed, bouncetime=300)
+    GPIO.add_event_detect(btn_submit, GPIO.FALLING, callback=btn_guess_pressed, bouncetime=600)
     pass
 
 
@@ -104,9 +100,7 @@ def setup():
 def fetch_scores():
     # get however many scores there are
     score_count = None
-    eeprom.populate_mock_scores()
     score_count = eeprom.read_byte(0)
-    print(score_count)
     # Get the scores
     scores = eeprom.read_block(1, score_count*4)
     # convert the codes back to ascii
@@ -117,18 +111,41 @@ def fetch_scores():
     # return back the results
     return score_count, scores
 
-
+def congratulate():
+    print('   _____ ____  _   _  _____ _____         _______   _____ ')
+    print('  / ____/ __ \| \ | |/ ____|  __ \     /\|__   __| / ____|')
+    print(' | |   | |  | |  \| | |  __| |__) |   /  \  | |   | (___  ')
+    print(' | |   | |  | | . ` | | |_ |  _  /   / /\ \ | |    \___ \ ')
+    print(' | |___| |__| | |\  | |__| | | \ \  / ____ \| |    ____) |')
+    print('  \_____\____/|_| \_|\_____|_|  \_\/_/    \_\_|   |_____/ ')
+    print(' ========================================================\n')
+    print(' ========================================================)
 # Save high scores
-def save_scores():
+def save_scores(name):
     # fetch scores
     s_count, ss = fetch_scores()
     # include new score
-
+    new_score = [name, num_guesses]
+    scores = []
+    scores.append(new_score)
     # sort
+    # Iterate through 1D array and transfrom into 2D array with form [[name, num_guesses],...] so we can use the sort function
+    for i in range(0,len(ss),4):
+        score = [ss[i] + ss[i + 1] + ss[i + 2], ss[i + 3]]
+        scores.append(score)
+    # sort based on num_guesses
+    scores.sort(key=lambda x: x[1])
     # update total amount of scores
+    s_count += 1
+    eeprom.write_block(0,[s_count])
     # write new scores
+    data = []
+    for score in scores:
+        for letter in score[0]:
+            data.append(ord(letter))
+        data.append(score[1])
+    eeprom.write_block(1,data)
     pass
-
 
 # Generate guess number
 def generate_number():
@@ -164,9 +181,8 @@ def btn_increase_pressed(channel):
 
 # Guess button
 def btn_guess_pressed(channel):
-    print('doing a guess')
-    global end_of_game, value, guess, buzzer, pwmLED
-    print('value is ' + str(value))
+    global end_of_game, value, guess, buzzer, pwmLED, num_guesses
+    name = ''
     start = time.time()
     while GPIO.input(channel) == GPIO.LOW:
         time.sleep(0.01)
@@ -175,12 +191,24 @@ def btn_guess_pressed(channel):
             end_of_game = True
             return
     if (value != guess):
+        num_guesses += 1
+        buzzer.start(0)
+        pwmLED.start(0)
         accuracy_leds()
         trigger_buzzer()
     else:
         buzzer.stop()
         pwmLED.stop()
-
+        os.system('clear')
+        congratulate()
+        name = input("You've completed the number shuffle challenge. You took " + str(num_guesses) + " guesses \nPlease enter your name below to save your score: \n")
+        while len(name) > 3:
+            name = input('Your name must not exceed 3 characters in length please re-enter your name: \n')
+        save_scores(name)
+        os.system('clear')
+        time.sleep(0.1)
+        end_of_game = True
+    
     # If they've pressed and held the button, clear up the GPIO and take them back to the menu screen
     # Compare the actual value with the user value displayed on the LEDs
     # Change the PWM LED
