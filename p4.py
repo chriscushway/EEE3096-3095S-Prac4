@@ -112,7 +112,6 @@ def fetch_scores():
 
 # Save high scores
 def save_scores(name):
-    print('saving scores')
     # fetch scores
     s_count, ss = fetch_scores()
     # include new score
@@ -141,7 +140,6 @@ def save_scores(name):
 # Generate guess number
 def generate_number():
     return random.randint(0, pow(2, 3)-1)
-
 
 # Increase button pressed
 def btn_increase_pressed(channel):
@@ -178,7 +176,6 @@ def btn_guess_pressed(channel):
     global end_of_game, value, buzzer, pwmLED, num_guesses
     # only allow guess submission when game is in session
     if (not end_of_game):
-        print('guessing')
         name = ''
         num_guesses += 1
         guess = get_led_value()
@@ -189,7 +186,6 @@ def btn_guess_pressed(channel):
             if (end - start > 2):
                 end_of_game = True
                 return
-        print('out of loop')
         if (value != guess):
             buzzer.start(0)
             pwmLED.start(0)
@@ -205,18 +201,6 @@ def btn_guess_pressed(channel):
             os.system('clear')
             time.sleep(0.1)
             end_of_game = True
-    
-    # If they've pressed and held the button, clear up the GPIO and take them back to the menu screen
-    # Compare the actual value with the user value displayed on the LEDs
-    # Change the PWM LED
-    # if it's close enough, adjust the buzzer
-    # if it's an exact guess:
-    # - Disable LEDs and Buzzer
-    # - tell the user and prompt them for a name
-    # - fetch all the scores
-    # - add the new score
-    # - sort the scores
-    # - Store the scores back to the EEPROM, being sure to update the score count
     pass
 
 
@@ -227,14 +211,10 @@ def accuracy_leds(guess):
     # - For example if the answer is 6 and a user guesses 4, the brightness should be at 4/6*100 = 66%
     # - If they guessed 7, the brightness would be at ((8-7)/(8-6)*100 = 50%
     dc = 0
-    print('guess is ' + str(guess))
-    print('value is ' + str(value))
-
     if (guess > value):
         dc = (8-guess)/(8-value)*100
     else:
         dc = guess/value * 100
-    print(dc)
     pwmLED.ChangeDutyCycle(dc)
     pass
 
